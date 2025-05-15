@@ -1,0 +1,88 @@
+#include <Arduino.h>
+#include <Wire.h>
+#include <ArdusatSDK.h>
+
+const uint8_t LED_PIN       = 12;
+const uint16_t TEMP_READ_MS = 1000;  // read temperature every 1 second
+const float TEMP_LOW        = 22.0;
+const float TEMP_HIGH       = 27.0;
+
+ArdusatSerial serialConnection(SERIAL_MODE_HARDWARE_AND_SOFTWARE, 8, 9);
+Temperature temp;
+
+unsigned long lastTempRead = 0;
+bool ledState = LOW;
+
+void setup() {
+  Wire.begin();
+  temp.begin();
+  serialConnection.begin(9600);
+  Serial.begin(9600);
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LOW);
+  delay(2000);  // allow sensor to stabilize
+
+  Serial.println(F("Starting temperature monitor with LED ON/OFF control (no blinking)"));
+}
+
+void loop() {
+  unsigned long now = millis();
+
+  if (now - lastTempRead >= TEMP_READ_MS) {
+    lastTempRead = now;
+
+    // Read temperature JSON string
+    String json = temp.readToJSON("ambient_temp");
+    Serial.print(F("[DEBUG] JSON temp data: "));
+    Serial.println(json);
+
+    // Parse temperature value from JSON
+    int valueIndex = json.indexOf("\"value\":");
+    float currentTemp = 0.0;
+    if (valueIndex != -1) {
+      int start = valueIndex + 8; // length of '"value":'
+      int end = json.indexOf(',', start);
+      if (end == -1) { // In case it's the last element without trailing comma
+        end = json.indexOf('}', start);
+      }
+      String tempStr = json.substring(start, end);
+      currentTemp = tempStr.toFloat();
+    } else {
+      Serial.println(F("[ERROR] Could not parse temperature from JSON!"));
+      // Safety: turn LED off if no valid temp
+      digitalWrite(LED_PIN, LOW);
+      ledState = LOW;
+      return;
+    }
+
+    Serial.print(F("[DEBUG] Parsed Temperature: "));
+    Serial.println(currentTemp);
+
+    serialConnection.println(json);
+
+    // Sanity check
+    if (currentTemp < -40 || currentTemp > 85) {
+      Serial.println(F("[ERROR] Invalid temperature reading, skipping LED update."));
+      digitalWrite(LED_PIN, LOW);
+      ledState = LOW;
+      return;
+    }
+
+    // Decide LED state based on temperature range
+    if (currentTemp <= TEMP_LOW) {
+      Serial.println(F("[INFO] Temperature too LOW - LED ON"));
+      digitalWrite(LED_PIN, HIGH);
+      ledState = HIGH;
+    }
+    else if (currentTemp >= TEMP_HIGH) {
+      Serial.println(F("[INFO] Temperature too HIGH - LED ON"));
+      digitalWrite(LED_PIN, HIGH);
+      ledState = HIGH;
+    }
+    else {
+      Serial.println(F("[INFO] Temperature in range - LED OFF"));
+      digitalWrite(LED_PIN, LOW);
+      ledState = LOW;
+    }
+  }
+}
