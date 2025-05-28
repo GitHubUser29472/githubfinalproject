@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <ArdusatSDK.h>
-
+//light turns on when temp is below 72 or above 77
 const uint8_t LED_PIN       = 12;
 const uint16_t TEMP_READ_MS = 1000;  // read temperature every 1 second
 const float TEMP_LOW        = 22.0;
